@@ -18,6 +18,8 @@ try {
     $conn->exec("CREATE TABLE IF NOT EXISTS applications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
         gpa REAL NOT NULL,
         credit_hours INTEGER NOT NULL,
         age INTEGER NOT NULL,
@@ -93,7 +95,15 @@ try {
         FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE
     )");
 
-    echo "Database and tables created successfully!";
+    // Insert Users - Admin, Committee, Students
+    $conn->exec("INSERT OR IGNORE INTO users (username, email, password, role) VALUES 
+        ('admin', 'admin@example.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'admin'),
+        ('committee_john_doe', 'john.doe@committee.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'committee'),
+        ('committee_jane_smith', 'jane.smith@committee.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'committee'),
+        ('michael_jones', 'michael.jones@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student'),
+        ('emily_davis', 'emily.davis@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student')
+    ");
+
 } catch (PDOException $e) {
     die("Connection failed: " . $e->getMessage());
 }

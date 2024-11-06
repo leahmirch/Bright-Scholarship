@@ -79,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Dashboard</title>
     <style>
-        /* Main styling */
         body { font-family: Arial, sans-serif; background-color: #e9ecef; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .dashboard-container { width: 90%; max-width: 800px; background-color: #f9f9f9; border-radius: 10px; padding: 20px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
         h1, h3 { text-align: center; color: #333; }
@@ -87,12 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
         .section h3 { margin-top: 0; }
         .form-group { margin-bottom: 15px; }
         label { font-weight: bold; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
-        .button-group { display: flex; justify-content: space-between; margin-top: 20px; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
+        .button-group { display: flex; justify-content: center; margin-top: 20px; }
         button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
         .message { color: green; font-weight: bold; text-align: center; margin-top: 15px; }
-        .status-info { background-color: #dfe6f0; padding: 15px; border-radius: 5px; color: #444; }
+        .status-info, .application-log, .notifications { padding: 15px; border-radius: 5px; color: #444; }
         .status-info p, .application-log p, .notifications p { margin: 5px 0; }
         .error { color: red; }
     </style>
@@ -118,6 +117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
         <h3>Submit a New Application</h3>
         <form method="POST">
             <div class="form-group">
+                <label for="student_number">Student Number:</label>
+                <input type="text" name="student_number" required>
+            </div>
+            <div class="form-group">
                 <label for="first_name">First Name:</label>
                 <input type="text" name="first_name" required>
             </div>
@@ -126,16 +129,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
                 <input type="text" name="last_name" required>
             </div>
             <div class="form-group">
-                <label for="gpa">GPA:</label>
+                <label for="phone">Phone Number:</label>
+                <input type="text" name="phone" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email Address:</label>
+                <input type="text" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="gender">Gender:</label>
+                <select name="gender" required>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="dob">Date of Birth:</label>
+                <input type="text" name="dob" placeholder="YYYY-MM-DD" required>
+            </div>
+            <div class="form-group">
+                <label for="status">Status:</label>
+                <select name="status" required>
+                    <option value="freshman">Freshman</option>
+                    <option value="sophomore">Sophomore</option>
+                    <option value="junior">Junior</option>
+                    <option value="senior">Senior</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="gpa">Cumulative GPA:</label>
                 <input type="number" step="0.01" name="gpa" required>
             </div>
             <div class="form-group">
-                <label for="credit_hours">Credit Hours:</label>
+                <label for="credit_hours">Credit Hours (This Semester):</label>
                 <input type="number" name="credit_hours" required>
-            </div>
-            <div class="form-group">
-                <label for="age">Age:</label>
-                <input type="number" name="age" required>
             </div>
             <div class="button-group">
                 <button type="submit">Submit Application</button>
@@ -176,3 +203,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
 
 </body>
 </html>
+

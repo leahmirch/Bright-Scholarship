@@ -89,26 +89,28 @@ $applications = $conn->query("SELECT * FROM applications")->fetchAll(PDO::FETCH_
             <table>
                 <tr>
                     <th>Student Name</th>
+                    <th>Student Number</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Gender</th>
+                    <th>Date of Birth</th>
+                    <th>Status</th>
                     <th>GPA</th>
                     <th>Credit Hours</th>
-                    <th>Status</th>
-                    <th>Submitted Date</th>
+                    <th>Registrar Verified</th>
                     <th>Actions</th>
                 </tr>
                 <tr>
                     <td>Emily Davis</td>
+                    <td>20231234</td>
+                    <td>emily.davis@example.com</td>
+                    <td>(123) 456-7890</td>
+                    <td>Female</td>
+                    <td>2002-08-15</td>
+                    <td>Senior</td>
                     <td>3.8</td>
                     <td>18</td>
-                    <td>Waiting</td>
-                    <td>10/10/2023</td>
-                    <td><button>View Details</button> <button>Edit Status</button></td>
-                </tr>
-                <tr>
-                    <td>Michael Jones</td>
-                    <td>3.6</td>
-                    <td>15</td>
-                    <td>Eligible</td>
-                    <td>10/05/2023</td>
+                    <td>Yes</td>
                     <td><button>View Details</button> <button>Edit Status</button></td>
                 </tr>
             </table>
@@ -149,7 +151,7 @@ $applications = $conn->query("SELECT * FROM applications")->fetchAll(PDO::FETCH_
     <div class="section">
         <h3>Notifications & Alerts</h3>
         <div class="notifications">
-            <p><strong>High Priority:</strong> Application 1024 flagged for review.</p>
+            <p><strong>High Priority:</strong> Application 1024 flagged for review with discrepancies from Registrar data.</p>
             <p><strong>New Application:</strong> Emily Davis submitted a new application.</p>
             <hr>
             <p><strong>Reminder:</strong> Michael Jones' application status needs review.</p>

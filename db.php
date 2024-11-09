@@ -47,43 +47,6 @@ try {
         closing_time TIMESTAMP
     )");
 
-    // Verification_Log table
-    $conn->exec("CREATE TABLE IF NOT EXISTS verification_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        application_id INTEGER NOT NULL,
-        verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        gpa_verified BOOLEAN NOT NULL,
-        credit_hours_verified BOOLEAN NOT NULL,
-        age_verified BOOLEAN NOT NULL,
-        discrepancy_found BOOLEAN NOT NULL,
-        discrepancy_details TEXT,
-        FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE
-    )");
-
-    // Eligibility_Checks table
-    $conn->exec("CREATE TABLE IF NOT EXISTS eligibility_checks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        application_id INTEGER NOT NULL,
-        gpa_eligible BOOLEAN NOT NULL,
-        credit_hours_eligible BOOLEAN NOT NULL,
-        age_eligible BOOLEAN NOT NULL,
-        full_time BOOLEAN NOT NULL,
-        core_courses BOOLEAN NOT NULL,
-        overall_eligible BOOLEAN NOT NULL,
-        FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE
-    )");
-
-    // Votes table
-    $conn->exec("CREATE TABLE IF NOT EXISTS votes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        application_id INTEGER NOT NULL,
-        committee_member_id INTEGER NOT NULL,
-        vote_casted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        vote INTEGER CHECK(vote IN (0, 1)) NOT NULL,
-        FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE,
-        FOREIGN KEY(committee_member_id) REFERENCES users(id) ON DELETE CASCADE
-    )");
-
     // Notifications table
     $conn->exec("CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,16 +56,6 @@ try {
         sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         read BOOLEAN DEFAULT 0,
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-    )");
-
-    // Award table
-    $conn->exec("CREATE TABLE IF NOT EXISTS award (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        application_id INTEGER NOT NULL,
-        awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        payment_status TEXT CHECK(payment_status IN ('pending', 'completed')) NOT NULL,
-        amount REAL NOT NULL,
-        FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE
     )");
 
     // Insert Users - Admin, Committee, Students

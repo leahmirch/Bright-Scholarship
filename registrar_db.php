@@ -13,14 +13,19 @@ try {
         email TEXT NOT NULL UNIQUE,
         gpa REAL NOT NULL,
         credit_hours INTEGER NOT NULL,
-        age INTEGER NOT NULL
+        age INTEGER NOT NULL,
+        status TEXT CHECK(status IN ('Freshman', 'Sophomore', 'Junior', 'Senior')) NOT NULL
     )");
 
     // Insert Registrar Records
-    $conn->exec("INSERT OR IGNORE INTO registrar_records (first_name, last_name, email, gpa, credit_hours, age) VALUES 
-        ('Michael', 'Jones', 'michael.jones@student.com', 3.6, 15, 20),
-        ('Emily', 'Davis', 'emily.davis@student.com', 3.8, 18, 22),
-        ('Leah', 'Mirch', 'lmirch@umich.edu', 3.62, 15, 21)
+    $conn->exec("INSERT OR IGNORE INTO registrar_records (first_name, last_name, email, gpa, credit_hours, age, status) VALUES 
+        ('Michael', 'Jones', 'michael.jones@student.com', 3.6, 15, 20, 'Junior'),
+        ('Emily', 'Davis', 'emily.davis@student.com', 3.8, 18, 22, 'Senior'),
+        ('Leah', 'Mirch', 'lmirch@umich.edu', 3.62, 15, 21, 'Senior'),
+        ('Anna', 'Smith', 'anna.smith@student.com', 3.85, 15, 21, 'Junior'),
+        ('Jessica', 'Taylor', 'jessica.taylor@student.com', 3.85, 15, 21, 'Junior'),
+        ('Laura', 'Lee', 'laura.lee@student.com', 3.1, 11, 19, 'Sophomore'),
+        ('Jack', 'Black', 'jack.black@student.com', 2.9, 10, 18, 'Sophomore')
     ");
 
 } catch (PDOException $e) {

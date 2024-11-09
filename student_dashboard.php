@@ -8,68 +8,147 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     exit();
 }
 
-// Connect to registrar database to verify records
-$registrar_db_file = __DIR__ . '/registrar_db.sqlite';
-$registrarConn = new PDO("sqlite:" . $registrar_db_file);
-$registrarConn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
 $userId = $_SESSION['user_id'];
+$message = '';
+$status = 'pending';
+$remarks = '';
 
-// Retrieve the student's latest application details if it exists
-$stmt = $conn->prepare("SELECT * FROM applications WHERE user_id = :user_id ORDER BY id DESC LIMIT 1");
-$stmt->execute([':user_id' => $userId]);
-$application = $stmt->fetch(PDO::FETCH_ASSOC);
-
-// Check if the student already applied (only one application allowed)
-$hasApplied = $application ? true : false;
-
-// Status Messages
-$statusMessages = [
-    'pending' => "Your application has been successfully submitted and is awaiting verification.",
-    'verified' => "Your application has passed verification and is now eligible for further review.",
-    'discrepant' => "Your application was found to have discrepancies and was declined.",
-    'eligible' => "Your application meets eligibility criteria and will proceed to the next review stage.",
-    'ineligible' => "Your application does not meet the eligibility criteria.",
-    'awarded' => "Congratulations! You have been awarded the Bright Scholarship.",
-    'declined' => "Your application was not selected for the scholarship this time."
-];
-
-// Retrieve discrepancy details if application status is discrepant
-$discrepancyDetails = '';
-if ($application && $application['status'] === 'discrepant') {
-    $logStmt = $conn->prepare("SELECT remarks FROM application_status_log WHERE application_id = :application_id ORDER BY changed_at DESC LIMIT 1");
-    $logStmt->execute([':application_id' => $application['id']]);
-    $log = $logStmt->fetch(PDO::FETCH_ASSOC);
-    $discrepancyDetails = $log ? $log['remarks'] : '';
-}
-
-// Handle form submission directly within this file
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
+// Prevent re-submission on refresh by checking session variable
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_SESSION['application_submitted'])) {
+    // Retrieve form data
     $firstName = $_POST['first_name'];
     $lastName = $_POST['last_name'];
+    $phone = $_POST['phone'];
+    $email = $_POST['email'];
+    $gender = $_POST['gender'];
+    $dob = $_POST['dob'];
+    $statusInput = $_POST['status'];
     $gpa = $_POST['gpa'];
     $creditHours = $_POST['credit_hours'];
-    $age = $_POST['age'];
 
-    // Insert application with initial status of "pending"
-    $stmt = $conn->prepare("INSERT INTO applications (user_id, first_name, last_name, gpa, credit_hours, age, status) VALUES (:user_id, :first_name, :last_name, :gpa, :credit_hours, :age, 'pending')");
-    if ($stmt->execute([':user_id' => $userId, ':first_name' => $firstName, ':last_name' => $lastName, ':gpa' => $gpa, ':credit_hours' => $creditHours, ':age' => $age])) {
-        $applicationId = $conn->lastInsertId();
-        $message = "Application submitted successfully!";
+    // Calculate age based on DOB
+    $dobDate = new DateTime($dob);
+    $today = new DateTime();
+    $age = $today->diff($dobDate)->y;
 
-        // Trigger Python script to verify application
-        $command = escapeshellcmd("python3 verify_application.py $applicationId");
-        $output = shell_exec($command);
-        echo "<pre>$output</pre>";  // Display the Python script output for debugging
+    // Insert the application into the applications table with the current timestamp
+    $stmt = $conn->prepare("INSERT INTO applications (user_id, first_name, last_name, gpa, credit_hours, age, status, created_at) VALUES (:user_id, :first_name, :last_name, :gpa, :credit_hours, :age, 'pending', datetime('now'))");
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':first_name' => $firstName,
+        ':last_name' => $lastName,
+        ':gpa' => $gpa,
+        ':credit_hours' => $creditHours,
+        ':age' => $age
+    ]);
+    $applicationId = $conn->lastInsertId();
 
-        // Refresh the application data after verification
-        $stmt = $conn->prepare("SELECT * FROM applications WHERE id = :application_id");
-        $stmt->execute([':application_id' => $applicationId]);
-        $application = $stmt->fetch(PDO::FETCH_ASSOC);
-    } else {
-        $message = "An error occurred. Please try again.";
+    // Set session flag to prevent duplicate submission
+    $_SESSION['application_submitted'] = true;
+
+    // Add notification for submission
+    $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) VALUES (:user_id, 'submission', 'Your application has been successfully submitted.')")
+         ->execute([':user_id' => $userId]);
+
+    // Eligibility check
+    $isEligible = true;
+    $eligibilityRemarks = '';
+
+    if ($gpa < 3.2) {
+        $isEligible = false;
+        $eligibilityRemarks .= 'GPA below 3.2. ';
     }
+    if ($creditHours < 12) {
+        $isEligible = false;
+        $eligibilityRemarks .= 'Less than 12 credit hours. ';
+    }
+    if ($age > 23) {
+        $isEligible = false;
+        $eligibilityRemarks .= 'Age over 23. ';
+    }
+
+    if ($isEligible) {
+        // Verify with Registrar Records
+        $registrarDb = new PDO('sqlite:registrar_db.sqlite');
+        $registrarStmt = $registrarDb->prepare("SELECT * FROM registrar_records WHERE first_name = :first_name AND last_name = :last_name AND email = :email AND gpa = :gpa AND credit_hours = :credit_hours AND age = :age");
+        $registrarStmt->execute([
+            ':first_name' => $firstName,
+            ':last_name' => $lastName,
+            ':email' => $email,
+            ':gpa' => $gpa,
+            ':credit_hours' => $creditHours,
+            ':age' => $age
+        ]);
+
+        if ($registrarStmt->fetch()) {
+            $status = 'verified';
+            $remarks = 'Application verified against registrar records.';
+        } else {
+            $status = 'discrepant';
+            $remarks = 'Application data does not match registrar records.';
+        }
+    } else {
+        $status = 'ineligible';
+        $remarks = $eligibilityRemarks;
+    }
+
+    // Update application status and log
+    $conn->prepare("UPDATE applications SET status = :status WHERE id = :id")
+          ->execute([':status' => $status, ':id' => $applicationId]);
+
+    $conn->prepare("INSERT INTO application_status_log (application_id, status, remarks) VALUES (:application_id, :status, :remarks)")
+          ->execute([':application_id' => $applicationId, ':status' => $status, ':remarks' => $remarks]);
+
+    // Add notification for status update
+    $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) VALUES (:user_id, 'status_update', 'Your application status is now: $status.')")
+         ->execute([':user_id' => $userId]);
+
+    $message = "Application submitted.";
 }
+
+// Retrieve the latest application for the user
+$latestApplicationStmt = $conn->prepare("
+    SELECT a.*, asl.remarks AS latest_remarks 
+    FROM applications a
+    LEFT JOIN (
+        SELECT application_id, remarks 
+        FROM application_status_log 
+        WHERE (application_id, changed_at) IN (
+            SELECT application_id, MAX(changed_at)
+            FROM application_status_log
+            GROUP BY application_id
+        )
+    ) asl ON a.id = asl.application_id
+    WHERE a.user_id = :user_id
+    ORDER BY a.id DESC
+    LIMIT 1
+");
+$latestApplicationStmt->execute([':user_id' => $userId]);
+$latestApplication = $latestApplicationStmt->fetch(PDO::FETCH_ASSOC);
+
+// Retrieve all applications and their latest remarks for the user to display in history
+$applicationsStmt = $conn->prepare("
+    SELECT a.*, asl.remarks AS latest_remarks 
+    FROM applications a
+    LEFT JOIN (
+        SELECT application_id, remarks 
+        FROM application_status_log 
+        WHERE (application_id, changed_at) IN (
+            SELECT application_id, MAX(changed_at)
+            FROM application_status_log
+            GROUP BY application_id
+        )
+    ) asl ON a.id = asl.application_id
+    WHERE a.user_id = :user_id
+    ORDER BY a.id DESC
+");
+$applicationsStmt->execute([':user_id' => $userId]);
+$applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Retrieve all unread notifications for the user
+$notificationsStmt = $conn->prepare("SELECT * FROM notifications WHERE user_id = :user_id AND read = 0 ORDER BY sent_at DESC");
+$notificationsStmt->execute([':user_id' => $userId]);
+$notifications = $notificationsStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -83,36 +162,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
         .dashboard-container { width: 90%; max-width: 800px; background-color: #f9f9f9; border-radius: 10px; padding: 20px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
         h1, h3 { text-align: center; color: #333; }
         .section { margin-bottom: 20px; padding: 15px; border-radius: 5px; background-color: #ffffff; }
-        .section h3 { margin-top: 0; }
         .form-group { margin-bottom: 15px; }
         label { font-weight: bold; }
         input[type="text"], input[type="number"], select { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
         .button-group { display: flex; justify-content: center; margin-top: 20px; }
         button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #0056b3; }
         .message { color: green; font-weight: bold; text-align: center; margin-top: 15px; }
-        .status-info, .application-log, .notifications { padding: 15px; border-radius: 5px; color: #444; }
-        .status-info p, .application-log p, .notifications p { margin: 5px 0; }
-        .error { color: red; }
     </style>
 </head>
 <body>
 
 <div class="dashboard-container">
-    <!-- Header and Welcome Message -->
-    <h1>Welcome to the Scholarship Dashboard, Emily Davis</h1>
+    <h1>Welcome to the Scholarship Dashboard, <?= htmlspecialchars($latestApplication['first_name'] ?? 'Student') ?></h1>
     <p style="text-align: center;">Manage your scholarship application and view your application status here.</p>
 
-    <!-- Application Status Display -->
+    <?php if ($message): ?>
+        <div class="message"><?= htmlspecialchars($message) ?></div>
+    <?php endif; ?>
+
+    <!-- Spacer -->
+    <p> </p>
     <div class="section">
         <h3>Latest Application Status</h3>
         <div class="status-info">
-            <p><strong>Status:</strong> Waiting Submission</p>
-            <p><strong>Discrepancies:</strong> Not Applicable</p>
+            <p><strong>Status:</strong> <?= htmlspecialchars($latestApplication['status'] ?? 'No application yet.') ?></p>
+            <p><strong>Remarks:</strong> <?= htmlspecialchars($latestApplication['latest_remarks'] ?? 'No remarks.') ?></p>
         </div>
     </div>
 
-    <!-- Application Submission Form -->
     <div class="section">
         <h3>Submit a New Application</h3>
         <form method="POST">
@@ -174,24 +251,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
     <div class="section">
         <h3>Application History</h3>
         <div class="application-log">
-            <p><strong>Application Date:</strong> 2023-10-01</p>
-            <p><strong>Status:</strong> Awarded</p>
-            <p><strong>Notes:</strong> Congratulations! You have been awarded the Bright Scholarship.</p>
-            <hr>
-            <p><strong>Application Date:</strong> 2022-09-15</p>
-            <p><strong>Status:</strong> Declined</p>
-            <p><strong>Notes:</strong> Your application did not meet the eligibility criteria.</p>
+            <?php if (empty($applications)): ?>
+                <p>No prior applications submitted.</p>
+            <?php else: ?>
+                <?php foreach ($applications as $application): ?>
+                    <p><strong>Application Date:</strong> <?= htmlspecialchars($application['created_at']) ?></p>
+                    <p><strong>Status:</strong> <?= htmlspecialchars($application['status']) ?></p>
+                    <p><strong>Remarks:</strong> <?= htmlspecialchars($application['latest_remarks'] ?? 'No remarks.') ?></p>
+                    <hr>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </div>
     </div>
 
-    <!-- Notifications -->
-    <div class="section">
+     <!-- Notifications -->
+     <div class="section">
         <h3>Notifications</h3>
         <div class="notifications">
-            <p><strong>10/05/2023:</strong> Your application has been reviewed and is currently in the "Waiting" status.</p>
-            <p><strong>10/01/2023:</strong> You have successfully submitted your application.</p>
-            <hr>
-            <p><strong>09/15/2022:</strong> Your application was declined.</p>
+            <?php if (empty($notifications)): ?>
+                <p>No new notifications.</p>
+            <?php else: ?>
+                <?php foreach ($notifications as $notification): ?>
+                    <p><strong><?= htmlspecialchars($notification['sent_at']) ?>:</strong> <?= htmlspecialchars($notification['message']) ?></p>
+                    <hr>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -203,4 +287,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasApplied) {
 
 </body>
 </html>
-

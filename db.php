@@ -24,6 +24,7 @@ try {
         credit_hours INTEGER NOT NULL,
         age INTEGER NOT NULL,
         status TEXT CHECK(status IN ('pending', 'verified', 'discrepant', 'eligible', 'ineligible', 'awarded', 'declined')) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Add created_at column
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     )");
 

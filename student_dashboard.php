@@ -13,97 +13,126 @@ $message = '';
 $status = 'pending';
 $remarks = '';
 
+// Function to get current application session status
+function getCurrentSessionStatus($conn) {
+    $stmt = $conn->query("SELECT status FROM application_session ORDER BY action_date DESC LIMIT 1");
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? $result['status'] : 'closed';
+}
+
+// Get current application status
+$applicationStatus = getCurrentSessionStatus($conn);
+
 // Prevent re-submission on refresh by checking session variable
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_SESSION['application_submitted'])) {
-    // Retrieve form data
-    $firstName = $_POST['first_name'];
-    $lastName = $_POST['last_name'];
-    $phone = $_POST['phone'];
-    $email = $_POST['email'];
-    $gender = $_POST['gender'];
-    $dob = $_POST['dob'];
-    $statusInput = $_POST['status'];
-    $gpa = $_POST['gpa'];
-    $creditHours = $_POST['credit_hours'];
-
-    // Calculate age based on DOB
-    $dobDate = new DateTime($dob);
-    $today = new DateTime();
-    $age = $today->diff($dobDate)->y;
-
-    // Insert the application into the applications table with the current timestamp
-    $stmt = $conn->prepare("INSERT INTO applications (user_id, first_name, last_name, gpa, credit_hours, age, status, created_at) VALUES (:user_id, :first_name, :last_name, :gpa, :credit_hours, :age, 'pending', datetime('now'))");
-    $stmt->execute([
-        ':user_id' => $userId,
-        ':first_name' => $firstName,
-        ':last_name' => $lastName,
-        ':gpa' => $gpa,
-        ':credit_hours' => $creditHours,
-        ':age' => $age
-    ]);
-    $applicationId = $conn->lastInsertId();
-
-    // Set session flag to prevent duplicate submission
-    $_SESSION['application_submitted'] = true;
-
-    // Add notification for submission
-    $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) VALUES (:user_id, 'submission', 'Your application has been successfully submitted.')")
-         ->execute([':user_id' => $userId]);
-
-    // Eligibility check
-    $isEligible = true;
-    $eligibilityRemarks = '';
-
-    if ($gpa < 3.2) {
-        $isEligible = false;
-        $eligibilityRemarks .= 'GPA below 3.2. ';
-    }
-    if ($creditHours < 12) {
-        $isEligible = false;
-        $eligibilityRemarks .= 'Less than 12 credit hours. ';
-    }
-    if ($age > 23) {
-        $isEligible = false;
-        $eligibilityRemarks .= 'Age over 23. ';
-    }
-
-    if ($isEligible) {
-        // Verify with Registrar Records
-        $registrarDb = new PDO('sqlite:registrar_db.sqlite');
-        $registrarStmt = $registrarDb->prepare("SELECT * FROM registrar_records WHERE first_name = :first_name AND last_name = :last_name AND email = :email AND gpa = :gpa AND credit_hours = :credit_hours AND age = :age");
-        $registrarStmt->execute([
-            ':first_name' => $firstName,
-            ':last_name' => $lastName,
-            ':email' => $email,
-            ':gpa' => $gpa,
-            ':credit_hours' => $creditHours,
-            ':age' => $age
-        ]);
-
-        if ($registrarStmt->fetch()) {
-            $status = 'verified';
-            $remarks = 'Application verified against registrar records.';
-        } else {
-            $status = 'discrepant';
-            $remarks = 'Application data does not match registrar records.';
-        }
+    if ($applicationStatus === 'closed') {
+        $message = "Sorry, scholarship applications are currently closed. Please check back later when applications open.";
     } else {
-        $status = 'ineligible';
-        $remarks = $eligibilityRemarks;
+        // Retrieve form data
+        $firstName = $_POST['first_name'];
+        $lastName = $_POST['last_name'];
+        $phone = $_POST['phone'];
+        $email = $_POST['email'];
+        $gender = $_POST['gender'];
+        $dob = $_POST['dob'];
+        $statusInput = $_POST['status'];
+        $gpa = $_POST['gpa'];
+        $creditHours = $_POST['credit_hours'];
+
+        // Calculate age based on DOB
+        $dobDate = new DateTime($dob);
+        $today = new DateTime();
+        $age = $today->diff($dobDate)->y;
+
+        try {
+            // Begin transaction
+            $conn->beginTransaction();
+
+            // Insert the application into the applications table
+            $stmt = $conn->prepare("INSERT INTO applications (user_id, first_name, last_name, gpa, credit_hours, age, status, created_at) VALUES (:user_id, :first_name, :last_name, :gpa, :credit_hours, :age, 'pending', datetime('now'))");
+            $stmt->execute([
+                ':user_id' => $userId,
+                ':first_name' => $firstName,
+                ':last_name' => $lastName,
+                ':gpa' => $gpa,
+                ':credit_hours' => $creditHours,
+                ':age' => $age
+            ]);
+            $applicationId = $conn->lastInsertId();
+
+            // Set session flag to prevent duplicate submission
+            $_SESSION['application_submitted'] = true;
+
+            // Add notification for submission
+            $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) VALUES (:user_id, 'submission', 'Your application has been successfully submitted.')")
+                ->execute([':user_id' => $userId]);
+
+            // Eligibility check
+            $isEligible = true;
+            $eligibilityRemarks = '';
+
+            if ($gpa < 3.2) {
+                $isEligible = false;
+                $eligibilityRemarks .= 'GPA below 3.2. ';
+            }
+            if ($creditHours < 12) {
+                $isEligible = false;
+                $eligibilityRemarks .= 'Less than 12 credit hours. ';
+            }
+            if ($age > 23) {
+                $isEligible = false;
+                $eligibilityRemarks .= 'Age over 23. ';
+            }
+
+            if ($isEligible) {
+                // Verify with Registrar Records
+                $registrarDb = new PDO('sqlite:registrar_db.sqlite');
+                $registrarStmt = $registrarDb->prepare("SELECT * FROM registrar_records WHERE first_name = :first_name AND last_name = :last_name AND email = :email AND gpa = :gpa AND credit_hours = :credit_hours AND age = :age");
+                $registrarStmt->execute([
+                    ':first_name' => $firstName,
+                    ':last_name' => $lastName,
+                    ':email' => $email,
+                    ':gpa' => $gpa,
+                    ':credit_hours' => $creditHours,
+                    ':age' => $age
+                ]);
+
+                if ($registrarStmt->fetch()) {
+                    $status = 'verified';
+                    $remarks = 'Application verified against registrar records.';
+                } else {
+                    $status = 'discrepant';
+                    $remarks = 'Application data does not match registrar records.';
+                }
+            } else {
+                $status = 'ineligible';
+                $remarks = $eligibilityRemarks;
+            }
+
+            // Update application status and log
+            $conn->prepare("UPDATE applications SET status = :status WHERE id = :id")
+                ->execute([':status' => $status, ':id' => $applicationId]);
+
+            $conn->prepare("INSERT INTO application_status_log (application_id, status, remarks) VALUES (:application_id, :status, :remarks)")
+                ->execute([':application_id' => $applicationId, ':status' => $status, ':remarks' => $remarks]);
+
+            // Add notification for status update
+            $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) VALUES (:user_id, 'status_update', :message)")
+                ->execute([
+                    ':user_id' => $userId,
+                    ':message' => "Your application status is now: $status. $remarks"
+                ]);
+
+            // Commit transaction
+            $conn->commit();
+            $message = "Application submitted successfully. Status: $status";
+
+        } catch (Exception $e) {
+            // Rollback transaction on error
+            $conn->rollBack();
+            $message = "Error submitting application: " . $e->getMessage();
+        }
     }
-
-    // Update application status and log
-    $conn->prepare("UPDATE applications SET status = :status WHERE id = :id")
-          ->execute([':status' => $status, ':id' => $applicationId]);
-
-    $conn->prepare("INSERT INTO application_status_log (application_id, status, remarks) VALUES (:application_id, :status, :remarks)")
-          ->execute([':application_id' => $applicationId, ':status' => $status, ':remarks' => $remarks]);
-
-    // Add notification for status update
-    $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) VALUES (:user_id, 'status_update', 'Your application status is now: $status.')")
-         ->execute([':user_id' => $userId]);
-
-    $message = "Application submitted.";
 }
 
 // Retrieve the latest application for the user
@@ -146,9 +175,18 @@ $applicationsStmt->execute([':user_id' => $userId]);
 $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Retrieve all unread notifications for the user
-$notificationsStmt = $conn->prepare("SELECT * FROM notifications WHERE user_id = :user_id AND read = 0 ORDER BY sent_at DESC");
+$notificationsStmt = $conn->prepare("
+    SELECT * FROM notifications 
+    WHERE user_id = :user_id AND read = 0 
+    ORDER BY sent_at DESC
+");
 $notificationsStmt->execute([':user_id' => $userId]);
 $notifications = $notificationsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Clear application submitted flag if viewing the page (not submitting)
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    unset($_SESSION['application_submitted']);
+}
 ?>
 
 <!DOCTYPE html>

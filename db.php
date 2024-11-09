@@ -11,7 +11,8 @@ try {
         username TEXT NOT NULL UNIQUE,
         email TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        role TEXT CHECK(role IN ('student', 'committee', 'admin')) NOT NULL
+        role TEXT CHECK(role IN ('student', 'committee', 'admin')) NOT NULL,
+        winner BOOLEAN DEFAULT 0 
     )");
 
     // Applications table
@@ -24,7 +25,7 @@ try {
         credit_hours INTEGER NOT NULL,
         age INTEGER NOT NULL,
         status TEXT CHECK(status IN ('pending', 'verified', 'discrepant', 'eligible', 'ineligible', 'awarded', 'declined')) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Add created_at column
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     )");
 
@@ -36,6 +37,14 @@ try {
         changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         remarks TEXT,
         FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE
+    )");
+
+    // Application_Session table
+    $conn->exec("CREATE TABLE IF NOT EXISTS application_session (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        status TEXT CHECK(status IN ('open', 'closed')) NOT NULL,
+        action_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        closing_time TIMESTAMP
     )");
 
     // Verification_Log table
@@ -104,6 +113,10 @@ try {
         ('michael_jones', 'michael.jones@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student'),
         ('emily_davis', 'emily.davis@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student')
     ");
+
+    $conn->exec("INSERT OR IGNORE INTO application_session (status, action_date) 
+                SELECT 'open', datetime('now')
+                WHERE NOT EXISTS (SELECT 1 FROM application_session)");
 
 } catch (PDOException $e) {
     die("Connection failed: " . $e->getMessage());

@@ -82,6 +82,18 @@ try {
         FOREIGN KEY(application_id) REFERENCES applications(id) ON DELETE CASCADE
     )");
 
+    // Committee Votes table
+    $conn->exec("CREATE TABLE IF NOT EXISTS committee_votes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        committee_member_id INTEGER NOT NULL,
+        candidate_id INTEGER NOT NULL,
+        voting_round INTEGER NOT NULL,
+        voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(committee_member_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY(candidate_id) REFERENCES users(id) ON DELETE CASCADE
+    )");
+
+
     
 
 
@@ -134,12 +146,12 @@ try {
 
                 // Add application status log entries
                 $conn->exec("INSERT INTO application_status_log (application_id, status, remarks) VALUES 
-                    ($app_id, '{$app['status']}', 'Initial application status.')
+                    ($app_id, '{$app['status']}', 'Application verified against registrar records.')
                 ");
                 
                 // Add notifications for each status change
                 $conn->exec("INSERT INTO notifications (user_id, notification_type, message) VALUES 
-                    ($user_id, 'submission', 'Your application has been submitted and is currently {$app['status']}.')
+                    ($user_id, 'submission', 'Your application status is now: {$app['status']}. Application verified against registrar records.')
                 ");
             }
         }

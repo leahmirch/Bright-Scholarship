@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'db.php';
+require 'voting.php';
 
 // Ensure user is logged in and is a committee member
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'committee') {
@@ -34,6 +35,7 @@ function getCurrentSessionStatus($conn) {
 
 // Function to determine winner based on criteria
 function determineWinnerBasedOnCriteria($candidates, $conn) {
+    
     // Sort by credit hours (descending)
     usort($candidates, function($a, $b) {
         if ($a['credit_hours'] === $b['credit_hours']) {
@@ -97,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' &&
             
             $winner = null;
             if (count($eligibleApplicants) === 1) {
-                $winner = $eligibleApplicants[0]; // Only one eligible applicant
+                $winner = $eligibleApplicants[0]; 
             } elseif (count($eligibleApplicants) > 1) {
                 $topGpaApplicants = array_filter($eligibleApplicants, function ($app) use ($eligibleApplicants) {
                     return $app['gpa'] === $eligibleApplicants[0]['gpa'];
@@ -138,17 +140,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' &&
                         ->execute([':app_id' => $app['id']]);
                 }
 
-                // Notify committee of winner selection
+                // Notify all committee members about the winner selection
                 $winnerName = $winner['first_name'] . ' ' . $winner['last_name'];
-                $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) 
-                    VALUES (:user_id, 'system', :message)")
-                    ->execute([
-                        ':user_id' => $userId,
-                        ':message' => "Winner has been selected: $winnerName."
-                    ]);
-                $message .= " Winner has been selected and notified.";
+                $committeeStmt = $conn->prepare("SELECT id FROM users WHERE role = 'committee'");
+                $committeeStmt->execute();
+                $committeeMembers = $committeeStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                foreach ($committeeMembers as $committeeMember) {
+                    $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) 
+                        VALUES (:user_id, 'system', :message)")
+                        ->execute([
+                            ':user_id' => $committeeMember['id'],
+                            ':message' => "Winner has been selected: $winnerName."
+                        ]);
+                }
+
+                $message .= " Winner has been selected and all committee members have been notified.";
             } else {
-                $message .= " No eligible applications found for awarding.";
+                $message .= " No winner decided at this moment.";
             }
         }
         
@@ -192,6 +201,85 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' &&
     }
 }
 
+// Handle vote submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vote'])) {
+    if (isset($_POST['csrf_token'], $_SESSION['csrf_token'], $_POST['candidate_id']) &&
+        hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+
+        $candidateId = $_POST['candidate_id'];
+
+        // Check if the committee member has already voted in the current round
+        $checkVoteStmt = $conn->prepare("
+            SELECT 1 FROM committee_votes 
+            WHERE committee_member_id = :committee_member_id 
+              AND voting_round = (SELECT MAX(voting_round) FROM committee_votes)
+        ");
+        $checkVoteStmt->execute([':committee_member_id' => $userId]);
+
+        // If the committee member hasn't voted yet, insert the vote
+        if (!$checkVoteStmt->fetch()) {
+            // Record the vote
+            $voteStmt = $conn->prepare("
+                INSERT INTO committee_votes (committee_member_id, candidate_id, voting_round, voted_at)
+                VALUES (:committee_member_id, :candidate_id, 
+                (SELECT COALESCE(MAX(voting_round), 0) + 1 FROM committee_votes), datetime('now'))
+            ");
+            $voteStmt->execute([
+                ':committee_member_id' => $userId,
+                ':candidate_id' => $candidateId
+            ]);
+
+            // Check if enough votes are present to select a winner
+            $winner = determineWinnerFromVotes($conn);
+            if ($winner) {
+                // Update winner status in users and applications tables
+                $conn->prepare("UPDATE users SET winner = 1 WHERE id = :user_id")
+                     ->execute([':user_id' => $winner['candidate_id']]);
+                $conn->prepare("UPDATE applications SET status = 'awarded' WHERE user_id = :user_id")
+                     ->execute([':user_id' => $winner['candidate_id']]);
+
+                // Notify the winner
+                $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) 
+                    VALUES (:user_id, 'award', 'Congratulations! You have been awarded the scholarship.')")
+                    ->execute([':user_id' => $winner['candidate_id']]);
+
+                // Notify the committee member about the winner selection
+                $winnerInfoStmt = $conn->prepare("
+                SELECT a.first_name, a.last_name 
+                FROM applications a
+                WHERE a.user_id = :user_id
+                ");
+                $winnerInfoStmt->execute([':user_id' => $winner['candidate_id']]);
+                $winnerInfo = $winnerInfoStmt->fetch(PDO::FETCH_ASSOC);
+                $winnerName = $winnerInfo['first_name'] . ' ' . $winnerInfo['last_name'];
+
+                // Notify the committee member about the winner selection
+                $conn->prepare("INSERT INTO notifications (user_id, notification_type, message) 
+                VALUES (:user_id, 'system', :message)")
+                ->execute([
+                    ':user_id' => $userId,
+                    ':message' => "Winner has been selected: $winnerName."
+                ]);
+
+                $message = "Voting complete. Winner has been selected and notified.";
+
+                // Clear finalists and set `multipleFinalists` to false to hide the voting section
+                $finalists = [];
+                $multipleFinalists = false;
+            } else {
+                $message = "Vote recorded. Waiting for other votes.";
+            }
+        } else {
+            $message = "Error: You have already voted in this round.";
+        }
+
+        // Regenerate CSRF token to prevent duplicate submissions
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    } else {
+        $message = "Error: Invalid CSRF token or missing candidate selection.";
+    }
+}
+
 if (!isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -210,8 +298,26 @@ $notificationsStmt = $conn->prepare("
     WHERE user_id = :user_id AND read = 0 
     ORDER BY sent_at DESC
 ");
+
+// Retrieve all notifications relevant to committee members
+$notificationsStmt = $conn->prepare("
+    SELECT n.*, u.username 
+    FROM notifications n
+    LEFT JOIN users u ON n.user_id = u.id 
+    WHERE (u.role = 'student' AND (n.notification_type = 'submission' OR n.notification_type = 'status_update'))
+       OR (n.user_id = :user_id AND n.read = 0)
+    ORDER BY n.sent_at DESC
+");
 $notificationsStmt->execute([':user_id' => $userId]);
 $notifications = $notificationsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$notificationsStmt->execute([':user_id' => $userId]);
+$notifications = $notificationsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$sessionStatus = getCurrentSessionStatus($conn);
+$eligibleCandidates = getTopCandidates($conn);
+$finalists = determineFinalists($eligibleCandidates);
+$multipleFinalists = count($finalists) > 1;
 
 ?>
 
@@ -295,34 +401,41 @@ $notifications = $notificationsStmt->fetchAll(PDO::FETCH_ASSOC);
         </table>
     </div>
 
-    <!-- Voting on Finalists -->
+    <!-- Voting Section -->
     <div class="section">
-        <h3>Voting on Finalists</h3>
-        <?php if (!empty($finalists)): ?>
-            <p>Select one of the finalists to vote on:</p>
-            <?php foreach ($finalists as $finalist): ?>
-                <p><strong>Candidate:</strong> <?= htmlspecialchars($finalist['first_name'] . ' ' . $finalist['last_name']) ?> (ID: <?= htmlspecialchars($finalist['id']) ?>)</p>
-                <form method="POST">
-                    <input type="hidden" name="application_id" value="<?= $finalist['id'] ?>">
-                    <button name="vote" value="approve">Approve</button>
-                    <button name="vote" value="decline">Decline</button>
-                </form>
-            <?php endforeach; ?>
+        <h3>Voting</h3>
+        <?php if ($sessionStatus === 'closed' && $multipleFinalists): ?>
+            <p>Select a finalist to vote for:</p>
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                <?php foreach (array_unique($finalists, SORT_REGULAR) as $finalist): ?>
+                    <label>
+                        <input type="radio" name="candidate_id" value="<?= htmlspecialchars($finalist['user_id']) ?>" required>
+                        <?= htmlspecialchars($finalist['first_name'] . ' ' . $finalist['last_name']) ?> 
+                        - GPA: <?= htmlspecialchars($finalist['gpa']) ?>
+                    </label><br>
+                <?php endforeach; ?>
+                <p> </p>
+                <button type="submit" name="submit_vote">Submit Vote</button>
+            </form>
         <?php else: ?>
-            <p>No voting to conduct at the moment.</p>
+            <p>Nothing to vote on at this time.</p>
         <?php endif; ?>
     </div>
 
     <!-- Notifications -->
     <div class="section">
         <h3>Notifications</h3>
-        <div>
+        <div class="notifications">
             <?php if (empty($notifications)): ?>
-                <p>No new notifications.</p>
+                <p>No notifications found.</p>
             <?php else: ?>
                 <?php foreach ($notifications as $notification): ?>
-                    <p><strong><?= htmlspecialchars($notification['sent_at']) ?>:</strong> <?= htmlspecialchars($notification['message']) ?></p>
-                    <hr>
+                    <p>
+                        <strong><?= htmlspecialchars($notification['notification_type']) ?>:</strong>
+                        <?= htmlspecialchars($notification['message']) ?>
+                        <small>(User: <?= htmlspecialchars($notification['username']) ?> | <?= htmlspecialchars($notification['sent_at']) ?>)</small>
+                    </p>
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>

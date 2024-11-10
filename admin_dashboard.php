@@ -407,7 +407,7 @@ $recentChanges = $conn->query("
         </div>
     </div>
 
-    <!-- Notifications & Alerts -->
+    <!-- Notifications -->
     <div class="section">
         <h3>Notifications</h3>
         <div class="notifications">

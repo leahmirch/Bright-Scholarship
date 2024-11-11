@@ -2,6 +2,7 @@
 session_start();
 require 'db.php';
 require 'voting.php';
+require 'award_notification.php';
 
 // Ensure user is logged in and is a committee member
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'committee') {
@@ -258,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vote'])) {
                 VALUES (:user_id, 'system', :message)")
                 ->execute([
                     ':user_id' => $userId,
-                    ':message' => "Winner has been selected: $winnerName."
+                    ':message' => "Winner has been voted: $winnerName."
                 ]);
 
                 $message = "Voting complete. Winner has been selected and notified.";
@@ -329,7 +330,7 @@ $multipleFinalists = count($finalists) > 1;
     <title>Committee Dashboard</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #e9ecef; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .dashboard-container { width: 90%; max-width: 1000px; background-color: #f9f9f9; border-radius: 10px; padding: 20px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
+        .dashboard-container { width: 95%; max-width: 1200px; background-color: #f9f9f9; border-radius: 10px; padding: 20px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
         h1, h3 { text-align: center; color: #333; }
         .centered { text-align: center; margin-top: 0; margin-bottom: 15px; }
         .section { margin-bottom: 20px; padding: 15px; border-radius: 5px; background-color: #ffffff; }
@@ -351,6 +352,10 @@ $multipleFinalists = count($finalists) > 1;
 
     <?php if ($message): ?>
         <div class="message"><?= htmlspecialchars($message) ?></div>
+    <?php endif; ?>
+
+    <?php if (isset($awardMessage)): ?>
+        <div class="message"><?= htmlspecialchars($awardMessage) ?></div>
     <?php endif; ?>
 
     <p> </p>
@@ -421,6 +426,15 @@ $multipleFinalists = count($finalists) > 1;
         <?php else: ?>
             <p>Nothing to vote on at this time.</p>
         <?php endif; ?>
+    </div>
+
+    <!-- Award Scholarship -->
+    <div class="section">
+    <h3>Scholarship Award and Notifications</h3>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <button type="submit" name="award_scholarship">Contact Registrar's Office for Winner Tuition Balance and Request Reimbursement from Accounting Department</button>
+        </form>
     </div>
 
     <!-- Notifications -->

@@ -14,7 +14,8 @@ try {
             role TEXT CHECK(role IN ('student', 'committee', 'admin')) NOT NULL,
             winner BOOLEAN DEFAULT 0,
             gender TEXT CHECK(gender IN ('male', 'female', 'other')),
-            class_year TEXT CHECK(class_year IN ('freshman', 'sophomore', 'junior', 'senior'))
+            class_year TEXT CHECK(class_year IN ('freshman', 'sophomore', 'junior', 'senior')),
+            tuition_bill REAL DEFAULT 0 
         )
     ");
 
@@ -60,10 +61,10 @@ try {
             closing_time TIMESTAMP
         )");
 
-    // Notifications table
+    // Notifications table 
     $conn->exec("CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
+        user_id INTEGER NULL, 
         notification_type TEXT NOT NULL,
         message TEXT NOT NULL,
         sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -102,16 +103,16 @@ try {
 
 
     // Insert sample users
-    $conn->exec("INSERT OR IGNORE INTO users (username, email, password, role, gender, class_year) VALUES 
-        ('admin', 'admin@example.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'admin', NULL, NULL),
-        ('committee_john_doe', 'john.doe@committee.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'committee', NULL, NULL),
-        ('committee_jane_smith', 'jane.smith@committee.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'committee', NULL, NULL),
-        ('michael_jones', 'michael.jones@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'male', 'junior'),
-        ('emily_davis', 'emily.davis@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'senior'),
-        ('anna_smith', 'anna.smith@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'junior'),
-        ('jessica_taylor', 'jessica.taylor@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'junior'),
-        ('jack_black', 'jack.black@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'male', 'freshman'),
-        ('laura_lee', 'laura.lee@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'sophomore')
+    $conn->exec("INSERT OR IGNORE INTO users (username, email, password, role, gender, class_year, tuition_bill) VALUES 
+        ('admin', 'admin@example.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'admin', NULL, NULL, 0),
+        ('committee_john_doe', 'john.doe@committee.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'committee', NULL, NULL, 0),
+        ('committee_jane_smith', 'jane.smith@committee.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'committee', NULL, NULL, 0),
+        ('michael_jones', 'michael.jones@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'male', 'junior', 15000.00),
+        ('emily_davis', 'emily.davis@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'senior', 14500.00),
+        ('anna_smith', 'anna.smith@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'junior', 15200.00),
+        ('jessica_taylor', 'jessica.taylor@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'junior', 15000.00),
+        ('jack_black', 'jack.black@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'male', 'freshman', 13000.00),
+        ('laura_lee', 'laura.lee@student.com', '" . password_hash('Password123', PASSWORD_BCRYPT) . "', 'student', 'female', 'sophomore', 13800.00)
     ");
 
     // Insert student records

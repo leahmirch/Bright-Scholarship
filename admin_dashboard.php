@@ -244,7 +244,7 @@ $recentChanges = $conn->query("
     <title>Admin Dashboard</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #e9ecef; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .dashboard-container { width: 90%; max-width: 1200px; background-color: #f9f9f9; border-radius: 10px; padding: 20px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
+        .dashboard-container { width: 95%; max-width: 1400px; background-color: #f9f9f9; border-radius: 10px; padding: 20px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
         h1, h3 { text-align: center; color: #333; }
         .section { margin-bottom: 20px; padding: 15px; border-radius: 5px; background-color: #ffffff; }
         .section h3 { margin-top: 0; }

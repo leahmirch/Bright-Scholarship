@@ -100,6 +100,7 @@ To create and configure the SQLite databases, follow these steps:
 - **Submit Application**: Students submit their scholarship applications, which include GPA, credit hours, and age checks.
 - **View Status**: Students can track their application’s progress and receive notifications of any updates.
 - **Application History**: Students can view past applications and any relevant remarks from the committee.
+- **Receive Reimbursement Notification**: If awarded, students receive a notification directly from the Accounting Department confirming their reimbursement amount.
 
 ### Committee Role
 - **Review Applications**: Committee members view and assess submitted applications.
